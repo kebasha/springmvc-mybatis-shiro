@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:aop="http://www.springframework.org/schema/aop"
+	xmlns:tx="http://www.springframework.org/schema/tx" xmlns:context="http://www.springframework.org/schema/context"
+	xmlns:security="http://www.springframework.org/schema/security"
+	xmlns:cache="http://www.springframework.org/schema/cache"
+	xsi:schemaLocation="
+   http://www.springframework.org/schema/beans 
+   http://www.springframework.org/schema/beans/spring-beans.xsd
+   http://www.springframework.org/schema/tx 
+   http://www.springframework.org/schema/tx/spring-tx.xsd
+   http://www.springframework.org/schema/aop 
+   http://www.springframework.org/schema/aop/spring-aop.xsd
+   http://www.springframework.org/schema/context
+   http://www.springframework.org/schema/context/spring-context.xsd
+   http://www.springframework.org/schema/security
+   http://www.springframework.org/schema/security/spring-security.xsd 
+   http://www.springframework.org/schema/cache
+   http://www.springframework.org/schema/cache/spring-cache.xsd
+">
+
+
+	<!--
+		<context:component-scan base-package="com.web.controller" />
+		<context:component-scan base-package="com.web.controller.*" />
+
+		<context:component-scan base-package="com.web.mapper" />
+	-->
+
+	<context:component-scan base-package="com.web.service.*"/>
+
+	<!-- enable autowire -->
+	<context:annotation-config />
+
+	<!-- import other xml files -->
+	<import resource="classpath:config/spring/applicationContext-*.xml" />
+	<import resource="classpath:config/spring/spring-ehcache.xml" />
+	<import resource="classpath:config/spring/spring-shiro.xml" />
+
+	<bean id="sqlSessionFactory" class="org.mybatis.spring.SqlSessionFactoryBean">
+		<property name="dataSource" ref="${dataSource}"></property>
+		<property name="configLocation" value="classpath:mybatis-config.xml"></property>
+		<property name="mapperLocations" value="classpath*:config/mybatis/**/*.xml"></property>
+	</bean>
+
+	<bean id="sqlSessionTemplate" class="org.mybatis.spring.SqlSessionTemplate">
+		<constructor-arg index="0" ref="sqlSessionFactory"></constructor-arg>
+		<!--
+			<constructor-arg name="sqlSessionFactory" ref="sqlSessionFactory"/>
+		-->
+		<!--
+			<property name="sqlSessionFactory"
+			value="sqlSessionFactory"></property>
+		-->
+	</bean>
+
+
+
+	<bean id="transactionManager"
+		class="org.springframework.jdbc.datasource.DataSourceTransactionManager">
+		<property name="dataSource" ref="${dataSource}"></property>
+	</bean>
+
+	<tx:advice id="manager" transaction-manager="transactionManager">
+		<tx:attributes>
+			<tx:method name="*Trans" propagation="REQUIRED" />
+		</tx:attributes>
+	</tx:advice>
+
+	<aop:config>
+		<aop:pointcut id="pc"
+			expression="execution (public * com.web.service..*.*(..))" />
+		<aop:advisor pointcut-ref="pc" advice-ref="manager" />
+	</aop:config>
+
+	<!-- 扫描DAO层 -->
+	<bean class="org.mybatis.spring.mapper.MapperScannerConfigurer">
+		<!--
+			<property name="annotationClass"
+			value="org.springframework.stereotype.Repository" />
+		-->
+		<property name="basePackage" value="com.web.mapper" />
+	</bean>
+
+	<bean id="schedulerFactoryBean" lazy-init="false"
+		class="org.springframework.scheduling.quartz.SchedulerFactoryBean">
+		<property name="applicationContextSchedulerContextKey">
+			<value>applicationContext</value>
+		</property>
+	</bean>
+	<!--
+		<bean id="loadTask" class="cn.com.zyx.action.schedule.LoadTask"
+		init-method="initTask"></bean> <bean id="initUtils"
+		class="cn.com.zyx.util.ZyxUtils" init-method="init"></bean> <bean
+		id="initCache" class="cn.com.zyx.util.DicCache"
+		init-method="init"></bean>
+	-->
+
+	
+	<bean id="exceptionInterceptor" class="com.web.core.interceptors.LogException"></bean>
+	<bean id="logInterceptor" class="com.web.core.interceptors.LogMessage"></bean>
+
+	<bean
+		class="org.springframework.aop.framework.autoproxy.BeanNameAutoProxyCreator">
+		<!-- 使用cglib代理,false默认使用spring代理 -->
+		<property name="proxyTargetClass" value="true" />
+		<property name="beanNames">
+			<list>
+				<value>*Controller*</value>
+				<value>*Service</value>
+			</list>
+		</property>
+		<property name="interceptorNames">
+			<list>
+				<value>logInterceptor</value>
+				<value>exceptionInterceptor</value>
+			</list>
+		</property>
+	</bean> 
+
+</beans>

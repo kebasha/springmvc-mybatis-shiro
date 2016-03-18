@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:util="http://www.springframework.org/schema/util" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:p="http://www.springframework.org/schema/p" xmlns:context="http://www.springframework.org/schema/context"
+	xmlns:mvc="http://www.springframework.org/schema/mvc"
+	xsi:schemaLocation="
+   http://www.springframework.org/schema/beans 
+   http://www.springframework.org/schema/beans/spring-beans.xsd
+   http://www.springframework.org/schema/util 
+   http://www.springframework.org/schema/util/spring-util.xsd
+   http://www.springframework.org/schema/context
+   http://www.springframework.org/schema/context/spring-context.xsd
+   http://www.springframework.org/schema/mvc 
+   http://www.springframework.org/schema/mvc/spring-mvc.xsd">
+
+	<!-- 保证实现了Shiro内部lifecycle函数的bean执行 -->
+	<bean id="lifecycleBeanPostProcessor" class="org.apache.shiro.spring.LifecycleBeanPostProcessor" />
+	<!-- 数据库保存的密码是使用MD5算法加密的，所以这里需要配置一个密码匹配对象 -->
+	<bean id="credentialsMatcher" class="org.apache.shiro.authc.credential.Md5CredentialsMatcher" />
+	<!-- 缓存管理 -->
+	<bean id="shiroCacheManager" class="org.apache.shiro.cache.MemoryConstrainedCacheManager" />
+
+	<bean id="jdbcRealm" class="org.apache.shiro.realm.jdbc.JdbcRealm">
+		<property name="credentialsMatcher" ref="credentialsMatcher"></property>
+		<property name="permissionsLookupEnabled" value="true"></property>
+		<property name="dataSource" ref="dataSourcePool"></property>
+		<property name="authenticationQuery" value="SELECT password FROM account WHERE user_name = ? "></property>
+		<!-- 
+		<property name="userRolesQuery" value="SELECT role_NAME FROM role WHERE role_id = (SELECT role_Id FROM account_role WHERE user_Id = (SELECT user_id FROM account WHERE user_name = ? ))"></property>
+		<property name="permissionsQuery" value="SELECT permission_NAME FROM permission WHERE permission_Id in (SELECT permission_Id FROM permission_role WHERE role_id in (SELECT role_id FROM role WHERE role_NAME = ? ))"></property>
+		 -->
+	</bean>
+	
+	<!-- Shiro安全管理器 -->
+	<bean id="securityManager" class="org.apache.shiro.web.mgt.DefaultWebSecurityManager">
+		<property name="realm" ref="jdbcRealm"></property>
+		<property name="cacheManager" ref="shiroCacheManager"></property> 
+	</bean>
+	
+	<!--   
+       Shiro主过滤器本身功能十分强大，其强大之处就在于它支持任何基于URL路径表达式的、自定义的过滤器的执行  
+       Web应用中，Shiro可控制的Web请求必须经过Shiro主过滤器的拦截，Shiro对基于Spring的Web应用提供了完美的支持   
+    -->
+	<bean id="shiroFilter" class="org.apache.shiro.spring.web.ShiroFilterFactoryBean">
+		<!-- Shiro的核心安全接口,这个属性是必须的 -->
+		<property name="securityManager" ref="securityManager"></property>
+		<!--
+			loginUrl:登录的URL successUrl:登录成功后跳转的URL unauthorizedUrl:没有权限时访问的URL
+		-->
+		<property name="loginUrl" value="/login.jsp"></property>
+		<!-- <property name="successUrl" value="/welcome.app"></property> -->
+		<!-- 用户访问未对其授权的资源时,所显示的连接 -->
+		<!--
+			若想更明显的测试此属性可以修改它的值,如unauthor.jsp,然后用[玄玉]登录后访问/admin/listUser.jsp就看见浏览器会显示unauthor.jsp
+		-->
+		<property name="unauthorizedUrl" value="/login.jsp"></property>
+		<!--
+			与其他过滤器进行关联 比如：authc,当有请求发送时,会调用id为authcFilter的bean所对应的过滤器
+		-->
+		<!--
+			<property name="filters"> <util:map> <entry key="authc"
+			value-ref="authcFilter"></entry> 将user信息存放到session,自定义 <entry
+			key="sysUser" value-ref="sysUserFilter"></entry> </util:map>
+			</property>
+		-->
+		<!--
+			请求过滤： 1、authc ->需要通过验证后才能访问 2、anon ->shiro对该类型请求不进行拦截
+			3、logout->退出并进行session销毁 4、/** =
+			user->表示访问该地址的用户是身份验证通过或RememberMe登录的都可以
+		-->
+		<!-- Shiro连接约束配置,即过滤链的定义 -->
+		<!--
+			此处可配合我的这篇文章来理解各个过滤连的作用http://blog.csdn.net/jadyer/article/details/12172839
+		-->
+		<!-- 下面value值的第一个'/'代表的路径是相对于HttpServletRequest.getContextPath()的值来的 -->
+		<!-- anon：它对应的过滤器里面是空的,什么都没做,这里.do和.jsp后面的*表示参数,比方说login.jsp?main这种 -->
+		<!--
+			authc：该过滤器下的页面必须验证后才能访问,它是Shiro内置的一个拦截器org.apache.shiro.web.filter.authc.FormAuthenticationFilter
+		-->
+		<property name="filterChainDefinitions">
+			<value>
+				/views/*=anon  
+                /tag=authc
+			</value>
+		</property>
+	</bean>
+
+
+	<!-- <bean id="authcFilter"
+		class="org.apache.shiro.web.filter.authc.FormAuthenticationFilter">
+		<property name="usernameParam" value="userName" />
+		<property name="passwordParam" value="password" />
+		<property name="rememberMeParam" value="rememberMe" />
+		<property name="failureKeyAttribute" value="shiroLoginFailure" />
+	</bean> -->
+
+	<!--
+		开启Shiro的注解(如@RequiresRoles,@RequiresPermissions),需借助SpringAOP扫描使用Shiro注解的类,并在必要时进行安全逻辑验证
+	-->
+	<!-- 配置以下两个bean即可实现此功能 -->
+	<!--
+		Enable Shiro Annotations for Spring-configured beans. Only run after
+		the lifecycleBeanProcessor has run
+	-->
+	<!--
+		由于本例中并未使用Shiro注解,故注释掉这两个bean(个人觉得将权限通过注解的方式硬编码在程序中,查看起来不是很方便,没必要使用)
+	-->
+	<!--
+		<bean
+		class="org.springframework.aop.framework.autoproxy.DefaultAdvisorAutoProxyCreator"
+		depends-on="lifecycleBeanPostProcessor"/> <bean
+		class="org.apache.shiro.spring.security.interceptor.AuthorizationAttributeSourceAdvisor">
+		<property name="securityManager" ref="securityManager"/> </bean>
+	-->
+
+</beans>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
